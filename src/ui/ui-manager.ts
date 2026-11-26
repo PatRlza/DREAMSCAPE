@@ -125,7 +125,7 @@ export class UIManager extends EventEmitter {
     const uiRoot = document.createElement('div');
     uiRoot.id = 'ui-root';
     uiRoot.style.cssText = `
-      position: fixed; inset: 0; pointer-events: none; z-index: 100;
+      position: fixed; inset: 0; z-index: 100;
       font-family: system-ui, -apple-system, sans-serif;
       color: #d8dce3;
     `;
