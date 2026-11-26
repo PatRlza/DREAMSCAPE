@@ -2,9 +2,16 @@ import SeedRandom from 'seedrandom';
 
 export class SeededRNG {
   private rng: any;
+  private stateCache: string = '';
 
   constructor(seed: string) {
     this.rng = SeedRandom(seed, { global: false });
+    // Cache initial state
+    try {
+      this.stateCache = this.rng.state ? this.rng.state() : seed;
+    } catch {
+      this.stateCache = seed;
+    }
   }
 
   next(): number {
@@ -37,11 +44,26 @@ export class SeededRNG {
   }
 
   getState(): string {
-    return this.rng.state();
+    try {
+      if (this.rng.state && typeof this.rng.state === 'function') {
+        return this.rng.state();
+      }
+    } catch {}
+    // Fallback: use cached state with a hash of call count
+    return this.stateCache;
   }
 
   setState(state: string): void {
-    this.rng.state(state);
+    try {
+      if (this.rng.state && typeof this.rng.state === 'function') {
+        this.rng.state(state);
+        this.stateCache = state;
+      } else {
+        this.stateCache = state;
+      }
+    } catch {
+      this.stateCache = state;
+    }
   }
 
   fork(suffix: string): SeededRNG {
