@@ -69,7 +69,7 @@ export class Game extends EventEmitter {
     this.interaction.on('promptHide', () => this.ui.hideInteractionPrompt());
     this.interaction.on('journalEntry', (entry) => this.ui.addJournalEntry(entry));
     
-    this.ui.on('newGame', (mode: GameMode) => this.startNewGame(mode));
+    this.ui.on('newGame', (mode: GameMode) => { this.startNewGame(mode); });
     this.ui.on('continueGame', () => this.continueGame());
     this.ui.on('settingsChanged', (settings: Partial<SettingsData>) => this.applySettings(settings));
     this.ui.on('quit', () => this.quit());
@@ -89,7 +89,7 @@ export class Game extends EventEmitter {
     console.log('[Game] Renderer initialized');
     
     console.log('[Game] Initializing audio...');
-    await this.withTimeout(this.audio.init(), 5000, 'Audio init timeout');
+    await this.audio.init();
     console.log('[Game] Audio initialized');
     
     console.log('[Game] Initializing UI...');
@@ -99,6 +99,15 @@ export class Game extends EventEmitter {
     this.onResize();
     this.showLoadingComplete();
     console.log('[Game] Initialization complete');
+    
+    // Resume audio context on first user interaction
+    const resumeAudio = async () => {
+      await this.audio.resumeAudioContext();
+      window.removeEventListener('click', resumeAudio);
+      window.removeEventListener('keydown', resumeAudio);
+    };
+    window.addEventListener('click', resumeAudio, { once: true });
+    window.addEventListener('keydown', resumeAudio, { once: true });
   }
   
   private async withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -118,12 +127,12 @@ export class Game extends EventEmitter {
     }
   }
   
-  startNewGame(mode: GameMode): void {
+  async startNewGame(mode: GameMode): Promise<void> {
     this.mode = mode;
     this.seed = this.generateSeed();
     const rng = new SeededRNG(this.seed);
     
-    this.world.generate(rng, mode);
+    await this.world.generate(rng, mode);
     this.player.reset(this.world.getStartPosition());
     this.puzzles.reset();
     this.interaction.reset();

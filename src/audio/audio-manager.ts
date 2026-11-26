@@ -47,16 +47,21 @@ export class AudioManager extends EventEmitter {
     if (this.isInitialized) return;
     
     try {
-      await Tone.start();
-      this.isInitialized = true;
-      
-      // Generate procedural sounds
+      // Tone.start() requires user gesture on some browsers - don't block on it
       this.generateProceduralSounds();
-      
-      // Load audio files if available
       await this.loadAudioFiles();
+      this.isInitialized = true;
     } catch (error) {
       console.warn('Audio initialization failed:', error);
+      this.isInitialized = true; // Don't block game init
+    }
+  }
+  
+  async resumeAudioContext(): Promise<void> {
+    try {
+      await Tone.start();
+    } catch (e) {
+      // Ignore - will retry on first user interaction
     }
   }
   
