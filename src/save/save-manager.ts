@@ -8,32 +8,32 @@ const SAVE_VERSION = 1;
 export class SaveManager {
   private useIndexedDB = false;
   private db: IDBDatabase | null = null;
-  
+
   constructor() {
     this.checkIndexedDBAvailability();
   }
-  
+
   private async checkIndexedDBAvailability(): Promise<void> {
     if ('indexedDB' in window) {
       try {
-        this.useIndexedDB = true;
         await this.initIndexedDB();
+        this.useIndexedDB = true;
       } catch {
         this.useIndexedDB = false;
       }
     }
   }
-  
+
   private initIndexedDB(): Promise<void> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open('DREAMSCAPE', 1);
-      
+
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         this.db = request.result;
         resolve();
       };
-      
+
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
         if (!db.objectStoreNames.contains('saves')) {
@@ -45,78 +45,66 @@ export class SaveManager {
       };
     });
   }
-  
+
   save(data: SaveData): void {
-    // Validate save data
     if (!this.validateSaveData(data)) {
       console.error('Invalid save data');
       return;
     }
-    
+
     data.version = SAVE_VERSION;
     data.timestamp = Date.now();
-    
+
     const serialized = JSON.stringify(data);
-    
-    if (this.useIndexedDB && this.db) {
-      this.saveToIndexedDB(data);
-    } else {
+
+    // Always mirror to localStorage so synchronous load() and hasSave() work reliably
+    try {
+      localStorage.setItem(SAVE_KEY, serialized);
+    } catch (e) {
+      console.warn('Failed to save to localStorage:', e);
+      this.clearOldSaves();
       try {
         localStorage.setItem(SAVE_KEY, serialized);
-      } catch (e) {
-        console.warn('Failed to save to localStorage:', e);
-        // Try to clear old saves and retry
-        this.clearOldSaves();
-        try {
-          localStorage.setItem(SAVE_KEY, serialized);
-        } catch {
-          console.error('Save failed completely');
-        }
+      } catch {
+        console.error('localStorage save failed completely');
       }
     }
-  }
-  
-  private async saveToIndexedDB(data: SaveData): Promise<void> {
-    if (!this.db) return;
-    
-    const transaction = this.db.transaction(['saves'], 'readwrite');
-    const store = transaction.objectStore('saves');
-    await store.put({ id: 'main', ...data });
-  }
-  
-  load(): SaveData | null {
+
     if (this.useIndexedDB && this.db) {
-      return this.loadFromIndexedDB();
-    } else {
-      return this.loadFromLocalStorage();
+      this.saveToIndexedDB(data).catch((e) => {
+        console.warn('Failed to mirror save to IndexedDB:', e);
+      });
     }
   }
-  
-  private loadFromIndexedDB(): SaveData | null {
-    if (!this.db) return null;
-    
-    const transaction = this.db.transaction(['saves'], 'readonly');
-    const store = transaction.objectStore('saves');
-    const request = store.get('main');
-    
-    request.onsuccess = () => {
-      const result = request.result;
-      if (result) {
-        const { id, ...data } = result;
-        return this.validateSaveData(data) ? data : null;
+
+  private saveToIndexedDB(data: SaveData): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        resolve();
+        return;
       }
-      return null;
-    };
-    
-    // Synchronous fallback for now
+
+      try {
+        const transaction = this.db.transaction(['saves'], 'readwrite');
+        const store = transaction.objectStore('saves');
+        const request = store.put({ id: 'main', ...data });
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  load(): SaveData | null {
     return this.loadFromLocalStorage();
   }
-  
+
   private loadFromLocalStorage(): SaveData | null {
     try {
       const saved = localStorage.getItem(SAVE_KEY);
       if (!saved) return null;
-      
+
       const data = JSON.parse(saved) as SaveData;
       return this.validateSaveData(data) ? data : null;
     } catch (e) {
@@ -124,7 +112,7 @@ export class SaveManager {
       return null;
     }
   }
-  
+
   private validateSaveData(data: any): data is SaveData {
     if (!data || typeof data !== 'object') return false;
     if (data.version !== SAVE_VERSION) return false;
@@ -135,10 +123,10 @@ export class SaveManager {
     if (!Array.isArray(data.solvedPuzzles)) return false;
     if (!Array.isArray(data.journalEntries)) return false;
     if (!data.settings || typeof data.settings !== 'object') return false;
-    
+
     return true;
   }
-  
+
   saveSettings(settings: SettingsData): void {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -146,7 +134,7 @@ export class SaveManager {
       console.warn('Failed to save settings:', e);
     }
   }
-  
+
   loadSettings(): SettingsData | null {
     try {
       const saved = localStorage.getItem(SETTINGS_KEY);
@@ -156,26 +144,25 @@ export class SaveManager {
       return null;
     }
   }
-  
+
   hasSave(): boolean {
-    if (this.useIndexedDB && this.db) {
-      // Would need async check
-      return true;
-    }
-    return !!localStorage.getItem(SAVE_KEY);
+    return !!this.loadFromLocalStorage();
   }
-  
+
   deleteSave(): void {
     if (this.useIndexedDB && this.db) {
-      const transaction = this.db.transaction(['saves'], 'readwrite');
-      const store = transaction.objectStore('saves');
-      store.delete('main');
+      try {
+        const transaction = this.db.transaction(['saves'], 'readwrite');
+        const store = transaction.objectStore('saves');
+        store.delete('main');
+      } catch (e) {
+        console.warn('Failed to delete IndexedDB save:', e);
+      }
     }
     localStorage.removeItem(SAVE_KEY);
   }
-  
+
   private clearOldSaves(): void {
-    // Remove any non-essential localStorage items
     const keysToKeep = [SAVE_KEY, SETTINGS_KEY];
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i);
@@ -184,14 +171,13 @@ export class SaveManager {
       }
     }
   }
-  
-  // Export/import for backup
+
   exportSave(): string | null {
     const save = this.load();
     if (!save) return null;
     return JSON.stringify(save, null, 2);
   }
-  
+
   importSave(json: string): boolean {
     try {
       const data = JSON.parse(json) as SaveData;
@@ -204,8 +190,7 @@ export class SaveManager {
       return false;
     }
   }
-  
-  // Create a save data object from game state
+
   static createSaveData(params: {
     gameMode: 'journey' | 'infinite';
     seed: string;
@@ -237,5 +222,4 @@ export class SaveManager {
   }
 }
 
-// THREE namespace for type references
 declare const THREE: any;

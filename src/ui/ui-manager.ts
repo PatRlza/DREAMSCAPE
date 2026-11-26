@@ -125,7 +125,7 @@ export class UIManager extends EventEmitter {
     const uiRoot = document.createElement('div');
     uiRoot.id = 'ui-root';
     uiRoot.style.cssText = `
-      position: fixed; inset: 0; z-index: 100;
+      position: fixed; inset: 0; z-index: 100; pointer-events: none;
       font-family: system-ui, -apple-system, sans-serif;
       color: #d8dce3;
     `;
@@ -179,7 +179,9 @@ export class UIManager extends EventEmitter {
       return btn;
     };
     
-    buttons.appendChild(createBtn(this.t('continue'), 'btn-continue', () => this.emit('continueGame')));
+    const continueBtn = createBtn(this.t('continue'), 'btn-continue', () => this.emit('continueGame'));
+    this.elements['btn-continue'] = continueBtn;
+    buttons.appendChild(continueBtn);
     buttons.appendChild(createBtn(this.t('newJourney'), 'btn-new-journey', () => this.emit('newGame', 'journey')));
     buttons.appendChild(createBtn(this.t('infiniteDream'), 'btn-infinite', () => this.emit('newGame', 'infinite')));
     buttons.appendChild(createBtn(this.t('settings'), 'btn-settings', () => this.showSettings(true)));
@@ -498,10 +500,9 @@ export class UIManager extends EventEmitter {
         checkboxInput.type = 'checkbox';
         checkboxInput.style.cssText = 'width: 20px; height: 20px; accent-color: #8ba4b8;';
         input = checkboxInput;
-        labelWrap.appendChild(input);
+        labelWrap.appendChild(checkboxInput);
         labelWrap.appendChild(document.createTextNode(field.label));
         wrapper.appendChild(labelWrap);
-        input = labelWrap; // Use wrapper as input for event handling
       }
       
       if (input && field.type !== 'checkbox') {
@@ -558,6 +559,7 @@ export class UIManager extends EventEmitter {
       if (e.key === 'Escape') {
         if (this.state.journalVisible) this.toggleJournal();
         else if (this.state.settingsVisible) this.showSettings(false);
+        else if (this.state.mainMenuVisible) return;
         else if (this.state.pauseMenuVisible) this.hidePauseMenu();
         else this.showPauseMenu();
       }
@@ -722,11 +724,17 @@ export class UIManager extends EventEmitter {
     this.showHint({ content: 'Path unlocked', tier: 1 });
   }
   
+  private transitionTimers: number[] = [];
+
   showTransition(type: string): void {
     const overlay = this.elements.transitionOverlay;
     const text = this.elements.transitionText;
     if (!overlay || !text) return;
-    
+
+    this.transitionTimers.forEach((id) => clearTimeout(id));
+    this.transitionTimers = [];
+    gsap.killTweensOf([overlay, text]);
+
     const typeNames: Record<string, string> = {
       door: 'Through the Door',
       stairs: 'Ascending',
@@ -737,22 +745,24 @@ export class UIManager extends EventEmitter {
       lift: 'Rising',
       rift: 'Between Worlds'
     };
-    
+
     text.textContent = typeNames[type] || 'Transition';
     text.style.opacity = '0';
     overlay.style.display = 'flex';
-    
+
     gsap.to(overlay, { opacity: 1, duration: 0.5 });
     gsap.to(text, { opacity: 1, duration: 0.5, delay: 0.3 });
-    
-    setTimeout(() => {
+
+    const t1 = window.setTimeout(() => {
       gsap.to(text, { opacity: 0, duration: 0.3 });
-      setTimeout(() => {
+      const t2 = window.setTimeout(() => {
         gsap.to(overlay, { opacity: 0, duration: 0.5, onComplete: () => {
           overlay.style.display = 'none';
         }});
       }, 1000);
+      this.transitionTimers.push(t2);
     }, 2000);
+    this.transitionTimers.push(t1);
   }
   
   updateRenderModeButton(mode: RenderMode): void {

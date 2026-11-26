@@ -69,7 +69,7 @@ export class InputManager extends EventEmitter {
   private handleKeyAction(code: string, pressed: boolean): void {
     switch (code) {
       case 'Escape':
-        if (pressed) this.emit('menuToggle');
+        // Handled by UIManager to avoid double-toggling pause menu
         break;
       case 'KeyE':
         // Interaction handled in update loop
