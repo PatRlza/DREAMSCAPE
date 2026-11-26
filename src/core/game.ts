@@ -84,11 +84,30 @@ export class Game extends EventEmitter {
   }
   
   async init(): Promise<void> {
-    await this.renderer.init();
-    await this.audio.init();
-    await this.ui.init();
+    console.log('[Game] Initializing renderer...');
+    await this.withTimeout(this.renderer.init(), 5000, 'Renderer init timeout');
+    console.log('[Game] Renderer initialized');
+    
+    console.log('[Game] Initializing audio...');
+    await this.withTimeout(this.audio.init(), 5000, 'Audio init timeout');
+    console.log('[Game] Audio initialized');
+    
+    console.log('[Game] Initializing UI...');
+    await this.withTimeout(this.ui.init(), 5000, 'UI init timeout');
+    console.log('[Game] UI initialized');
+    
     this.onResize();
     this.showLoadingComplete();
+    console.log('[Game] Initialization complete');
+  }
+  
+  private async withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error(message)), ms)
+      )
+    ]);
   }
   
   private showLoadingComplete(): void {

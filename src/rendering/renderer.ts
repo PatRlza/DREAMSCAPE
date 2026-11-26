@@ -95,13 +95,32 @@ export class Renderer extends EventEmitter {
   private async loadTextures(): Promise<void> {
     const loader = new THREE.TextureLoader();
     
-    // Noise texture for water/symbols
-    this.noiseTexture = loader.load('/textures/noise.png');
-    this.noiseTexture.wrapS = THREE.RepeatWrapping;
-    this.noiseTexture.wrapT = THREE.RepeatWrapping;
+    // Try to load noise texture, fallback to procedural
+    try {
+      this.noiseTexture = await new Promise<THREE.Texture>((resolve, reject) => {
+        loader.load(
+          '/textures/noise.png',
+          (texture) => {
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            resolve(texture);
+          },
+          undefined,
+          (error) => reject(error)
+        );
+        
+        // Timeout after 3 seconds
+        setTimeout(() => reject(new Error('Texture load timeout')), 3000);
+      });
+    } catch {
+      console.warn('[Renderer] Failed to load noise texture, using procedural');
+      this.createProceduralNoiseTexture();
+    }
     
-    // Create procedural noise if file doesn't exist
-    this.createProceduralNoiseTexture();
+    // Ensure we have a noise texture
+    if (!this.noiseTexture) {
+      this.createProceduralNoiseTexture();
+    }
   }
   
   private createProceduralNoiseTexture(): void {
