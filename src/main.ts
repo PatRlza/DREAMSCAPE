@@ -3,6 +3,7 @@ import { Game } from './core/game.js';
 async function main(): Promise<void> {
   const canvas = document.createElement('canvas');
   canvas.id = 'game-canvas';
+  canvas.style.cssText = 'position: fixed; inset: 0; z-index: 0;';
   document.getElementById('app')!.appendChild(canvas);
   
   const game = new Game(canvas);
