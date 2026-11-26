@@ -23,6 +23,7 @@ export class AudioManager extends EventEmitter {
   private currentAmbient: string | null = null;
   private currentMusic: string | null = null;
   private isInitialized = false;
+  private audioContextUnlocked = false;
   
   constructor() {
     super();
@@ -47,31 +48,18 @@ export class AudioManager extends EventEmitter {
     if (this.isInitialized) return;
     
     try {
-      // Tone.start() requires user gesture on some browsers - don't block on it
+      // Generate sounds immediately (synchronous, no Tone.start needed)
       this.generateProceduralSounds();
       await this.loadAudioFiles();
       this.isInitialized = true;
+      console.log('[Audio] Initialized (deferred Tone.start)');
     } catch (error) {
       console.warn('Audio initialization failed:', error);
-      this.isInitialized = true; // Don't block game init
-    }
-  }
-  
-  async resumeAudioContext(): Promise<void> {
-    try {
-      await Tone.start();
-    } catch (e) {
-      // Ignore - will retry on first user interaction
+      this.isInitialized = true; // Never block game init
     }
   }
   
   private generateProceduralSounds(): void {
-    // Simplified - just create placeholder sounds
-    this.createSimpleSounds();
-  }
-  
-  private createSimpleSounds(): void {
-    // Create basic SFX using simple oscillators
     try {
       this.sfxBuffers.set('interact', this.createSimpleBuffer(800, 0.1));
       this.sfxBuffers.set('activate_on', this.createSimpleBuffer(400, 0.3));
@@ -109,7 +97,18 @@ export class AudioManager extends EventEmitter {
   }
   
   async loadAudioFiles(): Promise<void> {
-    // Placeholder for loading external audio files
+    // Placeholder for external audio files
+  }
+  
+  async unlockAudioContext(): Promise<void> {
+    if (this.audioContextUnlocked) return;
+    try {
+      await Tone.start();
+      this.audioContextUnlocked = true;
+      console.log('[Audio] Context unlocked');
+    } catch (e) {
+      console.warn('Audio context unlock failed:', e);
+    }
   }
   
   playAmbient(theme: string): void {
@@ -151,9 +150,7 @@ export class AudioManager extends EventEmitter {
       Tone.Listener.positionX.value = listenerPosition.x;
       Tone.Listener.positionY.value = listenerPosition.y;
       Tone.Listener.positionZ.value = listenerPosition.z;
-    } catch (e) {
-      // Ignore
-    }
+    } catch (e) {}
   }
   
   setMasterVolume(volume: number): void {

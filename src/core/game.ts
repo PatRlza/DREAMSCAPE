@@ -76,6 +76,17 @@ export class Game extends EventEmitter {
     
     window.addEventListener('resize', () => this.onResize());
     window.addEventListener('visibilitychange', () => this.onVisibilityChange());
+    
+    // Unlock audio on first user interaction
+    const unlockAudio = async () => {
+      await this.audio.unlockAudioContext();
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+    };
+    window.addEventListener('click', unlockAudio, { once: true });
+    window.addEventListener('keydown', unlockAudio, { once: true });
+    window.addEventListener('touchstart', unlockAudio, { once: true });
   }
   
   private handleInput(input: PlayerInput): void {
@@ -100,14 +111,8 @@ export class Game extends EventEmitter {
     this.showLoadingComplete();
     console.log('[Game] Initialization complete');
     
-    // Resume audio context on first user interaction
-    const resumeAudio = async () => {
-      await this.audio.resumeAudioContext();
-      window.removeEventListener('click', resumeAudio);
-      window.removeEventListener('keydown', resumeAudio);
-    };
-    window.addEventListener('click', resumeAudio, { once: true });
-    window.addEventListener('keydown', resumeAudio, { once: true });
+    // Show main menu after initialization
+    this.ui.showMainMenu(this.mode);
   }
   
   private async withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -128,23 +133,31 @@ export class Game extends EventEmitter {
   }
   
   async startNewGame(mode: GameMode): Promise<void> {
+    console.log('[Game] Starting new game:', mode);
     this.mode = mode;
     this.seed = this.generateSeed();
     const rng = new SeededRNG(this.seed);
     
-    await this.world.generate(rng, mode);
-    this.player.reset(this.world.getStartPosition());
-    this.puzzles.reset();
-    this.interaction.reset();
-    this.ui.reset();
-    
-    this.isRunning = true;
-    this.lastTime = performance.now();
-    this.frameId = requestAnimationFrame(this.gameLoop.bind(this));
-    
-    this.audio.playAmbient(this.world.getCurrentZoneTheme());
-    this.ui.hideMainMenu();
-    this.saveGame();
+    try {
+      await this.world.generate(rng, mode);
+      this.player.reset(this.world.getStartPosition());
+      this.puzzles.reset();
+      this.interaction.reset();
+      this.ui.reset();
+      
+      this.isRunning = true;
+      this.lastTime = performance.now();
+      this.frameId = requestAnimationFrame(this.gameLoop.bind(this));
+      
+      this.audio.playAmbient(this.world.getCurrentZoneTheme());
+      this.ui.hideMainMenu();
+      this.saveGame();
+      console.log('[Game] New game started');
+    } catch (error) {
+      console.error('[Game] Failed to start new game:', error);
+      this.ui.showMainMenu(mode);
+      throw error;
+    }
   }
   
   async continueGame(): Promise<void> {
